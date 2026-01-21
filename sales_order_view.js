@@ -1,7 +1,7 @@
 $(function () {
 
 	$.ajax({
-		'url': '../../PHPCodes/SMIS/FillCustomers.php',
+		'url': '../../PHPCodes/SMIS/FillSalesOrderCustomers.php',
 		'async': 'false',
 		success: function(data) {
 			var customers = $.parseJSON(data);
@@ -57,27 +57,18 @@ $(function () {
 	let selectedItems = new Map();
 
 	$('#searchInput').on('input', handleSearchInput);
-    // ... all your existing AJAX calls and event handlers ...
-    
-    // Initialize DataTable on page load
-    table = $('#resultsTable').DataTable({
-        paging: true,
-        pageLength: 10,
-        searching: false,
-        ordering: true,
-        info: true,
-        autoWidth: false,
-        columnDefs: [
-            { orderable: false, targets: 0 }
-        ]
-    });
-    
-    // Initial attachment of click handlers
-    attachRowClickHandlers();
+
+	$('#selectCustomer').on('change', function() {
+		var priceLevelId = $(this).val();
+
+		$('#priceLevelId').text(priceLevelId);
+	});
 
 	function handleSearchInput() {
 		clearTimeout(searchTimeout);
 		const searchTerm = $(this).val().trim();
+
+		const priceLevelId = $('#selectCustomer').val();
 
 		const shouldSearch = searchTerm.length >= MIN_SEARCH_LENGTH;
 		if (!shouldSearch) {
@@ -86,7 +77,7 @@ $(function () {
 		}
 
 		searchTimeout = setTimeout(() => {
-			performSearch(searchTerm);
+			performSearch(searchTerm, priceLevelId);
 		}, DEBOUNCE_DELAY);
 	}
 
@@ -95,14 +86,22 @@ $(function () {
 		// $('#loading').hide();
 	}
 
-	function performSearch(searchTerm) {
+	function performSearch(searchTerm, priceLevelId) {
+		if (!priceLevelId) {
+			alert("Apply customer first!");
+			$('#searchInput').empty();
+			return;
+		}
 		showLoading();
 
 		$.ajax({
 			url: '../../PHPCodes/SMIS/SalesOrderDataTable.php',
 			type: 'GET',
 			dataType: 'json',
-			data: { search: searchTerm },
+			data: {
+				search: searchTerm,
+				priceLevelId: priceLevelId
+			},
 			success: handleSearchSuccess,
 			error: handleSearchError
 		});
@@ -194,7 +193,7 @@ $(function () {
 }
 
 	function createTableRow(row) {
-		const itemCode = row[0];
+		const itemCode = row[13];
 		const isSelected = selectedItems.has(itemCode);
 
         const tr = $('<tr>').addClass('clickable-row');
@@ -203,6 +202,7 @@ $(function () {
         if (isSelected) {
         	selectCell.html('<span class="selected-check">check</span>');
         	tr.addClass('selected-row');
+        	// initializeDataTable();
         } else {
         	selectCell.html('<span class="select-indicator">+</span>');
         }
@@ -212,12 +212,12 @@ $(function () {
 
         tr.append($('<td>').text(row[0]).addClass('item-code'));
         tr.append($('<td>').text(row[1]));
-        tr.append($('<td>').text(row[2]));
-        tr.append($('<td>').text(row[3]));
+        tr.append(row[2]);
+        tr.append(row[3]);
 
         tr.append(row[4]);
         tr.append($('<td>').text(row[5]));
-        tr.append(row[6]);
+        tr.append($('<td>').text(row[6]));
         tr.append(row[7]);
         tr.append(row[8]);
         tr.append(row[9]);
@@ -226,10 +226,20 @@ $(function () {
         tr.append(row[12]);
 
         tr.data('item-data', {
-        	code: row[0],
+        	code: row[13],
         	description: row[1],
         	batchNo: row[2],
-        	expiryDate: row[3]
+        	expiryDate: row[3],
+        	quantity: row[4],
+			unitOfMeasure: row[5], 
+			unitPrice: row[6],
+			amount: row[7],
+			tax: row[8],
+			unserve: row[9],
+			returnIndicated: row[10],
+			expiryDate1: row[11],
+			batchNo1: row[12],
+			id: row[13]
         });
         
         return tr;
@@ -237,11 +247,11 @@ $(function () {
 
     function initializeDataTable() {
     table = $('#resultsTable').DataTable({
-        paging: true,
+        paging: false,
         pageLength: 10,
         searching: false,
         ordering: true,
-        info: true,
+        info: false,
         autoWidth: false,
         destroy: true, // Allow re-initialization
         columnDefs: [
@@ -306,12 +316,12 @@ function toggleItemSelection(row, itemCode, itemData) {
 // NEW: Update selection panel (like ActiveOne)
 function updateSelectionPanel() {
     const panel = $('#selectionPanel');
-    if (!panel.length) {
-        // Create selection panel if it doesn't exist
-        createSelectionPanel();
-    }
+    // if (!panel.length) {
+    //     // Create selection panel if it doesn't exist
+    //     createSelectionPanel();
+    // }
     
-    const selectedList = $('#selectedItemsList');
+    const selectedList = $('#selectedResultsBody');
     selectedList.empty();
     
     if (selectedItems.size === 0) {
@@ -323,13 +333,24 @@ function updateSelectionPanel() {
     $('#selectedCount').text(selectedItems.size);
     
     selectedItems.forEach((item, code) => {
+    	console.log(item.id);
         const itemDiv = $(`
-            <div class="selected-item" data-code="${code}">
-                <div class="item-info">
-                    <strong>${code}</strong> - ${item.description}
-                </div>
-                <button class="remove-item" data-code="${code}">×</button>
-            </div>
+            <tr class="selected-row">
+                <td>${code}</td>
+                <td>${item.description}</td>
+                ${item.batchNo}
+                ${item.expiryDate}
+                ${item.quantity}
+                <td>${item.unitOfMeasure}</td>
+                <td>${item.unitPrice}</td>
+                ${item.amount}
+                ${item.tax}
+                ${item.unserve}
+                ${item.returnIndicated}
+                ${item.expiryDate1}
+                ${item.batchNo1}
+                <td><button class="remove-item" data-code="${code}">×</button></td>
+            </tr>
         `);
         selectedList.append(itemDiv);
     });
@@ -344,19 +365,36 @@ function updateSelectionPanel() {
 
 // NEW: Create selection panel
 function createSelectionPanel() {
-    const panelHtml = `
-        <div id="selectionPanel" class="selection-panel">
-            <div class="panel-header">
-                <h4>Selected Items (<span id="selectedCount">0</span>)</h4>
-                <button id="clearAll">Clear All</button>
-            </div>
-            <div id="selectedItemsList" class="selected-items-list">
-                <div class="empty-selection">No items selected</div>
-            </div>
-        </div>
-    `;
+    // const panelHtml = `
+    //     <div id="selectionPanel" class="selection-panel">
+    //         <div class="panel-header">
+    //             <h4>Selected Items (<span id="selectedCount">0</span>)</h4>
+    //             <button id="clearAll">Clear All</button>
+    //         </div>
+    //         <div>
+    //         	<table style="width: 100%;" class="display" id="selectedResultsTable">
+    //                   <thead style="font-size: 12px;" class="bg-navy">
+    //                     <th class="bg-navy">Code</th>
+    //                     <th class="bg-navy">Description</th>
+    //                     <th class="bg-navy">Batch #</th>
+    //                     <th class="bg-navy">Exp. Date</th>
+    //                     <th class="bg-navy">Qty.</th>
+    //                     <th class="bg-navy">U/M</th>
+    //                     <th class="bg-navy">Unit Price</th>
+    //                     <th class="bg-navy">Amount</th>
+    //                     <th class="bg-navy">Tax</th>
+    //                     <th class="bg-navy">Unserve</th>
+    //                     <th class="bg-navy">Return Indicator</th>
+    //                     <th class="bg-navy">Expiry Date</th>
+    //                     <th class="bg-navy">BatchNo</th>
+    //                   </thead>
+    //                   <tbody id="selectedResultsBody" style="font-size: 11px; font-weight: bold;"></tbody>
+    //                 </table>
+    //         </div>
+    //     </div>
+    // `;
     
-    $('#resultsTable_wrapper').after(panelHtml);
+    // $('#resultsTable_wrapper').after(panelHtml);
     
     // Clear all button handler
     $('#clearAll').on('click', function() {
