@@ -89,10 +89,9 @@ $(function () {
 	function performSearch(searchTerm, priceLevelId) {
 		if (!priceLevelId) {
 			alert("Apply customer first!");
-			$('#searchInput').empty();
+			$('#searchInput').val('');
 			return;
 		}
-		showLoading();
 
 		$.ajax({
 			url: '../../PHPCodes/SMIS/SalesOrderDataTable.php',
@@ -108,8 +107,6 @@ $(function () {
 	}
 
 	function handleSearchSuccess(response) {
-		hideLoading();
-
 		if (response.error) {
 			showError('Error loading data: ' + error);
 			return;
@@ -119,16 +116,7 @@ $(function () {
 	}
 
 	function handleSearchError(xhr, status, error) {
-		hideLoading();
 		showError('Error loading data: ' + error);
-	}
-
-	function showLoading() {
-		// $('#loading').show();
-	}
-
-	function hideLoading() {
-		$('#loading').hide();
 	}
 
 	function showError(message) {
@@ -176,25 +164,24 @@ $(function () {
 	// }
 
 	function populateResultsTable(data) {
-    const tbody = $('#resultsBody');
-    tbody.empty();
+		const tbody = $('#resultsBody');
+		tbody.empty();
 
-    $.each(data, function(index, row) {
-        const tr = createTableRow(row);
-        tbody.append(tr);
-    });
+		$.each(data, function(index, row) {
+			const tr = createTableRow(row);
+			tbody.append(tr);
+		});
 
-    // Re-initialize DataTable after populating
-    if($.fn.DataTable.isDataTable('#resultsTable')) {
-        table.destroy();
-    }
-    
-    initializeDataTable();
+		// Re-initialize DataTable after populating
+		if($.fn.DataTable.isDataTable('#resultsTable')) {
+			table.destroy();
+		}
+		initializeDataTable();
 }
 
 	function createTableRow(row) {
-		const itemCode = row[13];
-		const isSelected = selectedItems.has(itemCode);
+		const itemId = row[13];
+		const isSelected = selectedItems.has(itemId);
 
         const tr = $('<tr>').addClass('clickable-row');
 
@@ -216,7 +203,7 @@ $(function () {
         tr.append(row[3]);
 
         tr.append(row[4]);
-        tr.append($('<td>').text(row[5]));
+        tr.append($('<td>' + row[5] + '</td>'));
         tr.append($('<td>').text(row[6]));
         tr.append(row[7]);
         tr.append(row[8]);
@@ -226,7 +213,7 @@ $(function () {
         tr.append(row[12]);
 
         tr.data('item-data', {
-        	code: row[13],
+        	code: row[0],
         	description: row[1],
         	batchNo: row[2],
         	expiryDate: row[3],
@@ -261,13 +248,12 @@ $(function () {
         createdRow: function(row, data, dataIndex) {
             $(row).addClass('clickable-row');
             
-            // Get item code from the second cell (index 1)
-            const cells = $(row).find('td');
-            const itemCode = $(cells[1]).text(); // Item code is in second column
-            
-            if (selectedItems.has(itemCode)) {
-                $(row).addClass('selected-row');
-                $(row).find('.select-cell').html('<span class="selected-check">✓</span>');
+            // Get the actual item id from the row data
+            const rowElement = $(row);
+            const itemData = rowElement.data('item-data');
+            if (itemData && itemData.id && selectedItems.has(itemData.id)) {
+                rowElement.addClass('selected-row');
+                rowElement.find('.select-cell').html('<span class="selected-check">✓</span>');
             }
         },
         drawCallback: function() {
@@ -285,23 +271,23 @@ function attachRowClickHandlers() {
         }
         
         const row = $(this);
-        const itemCode = row.find('.item-code').text();
         const itemData = row.data('item-data');
+        const itemId = itemData.id;
         
-        toggleItemSelection(row, itemCode, itemData);
+        toggleItemSelection(row, itemId, itemData);
     });
 }
 
-// NEW: Toggle item selection (ActiveOne style)
-function toggleItemSelection(row, itemCode, itemData) {
-    if (selectedItems.has(itemCode)) {
+
+function toggleItemSelection(row, itemId, itemData) {
+    if (selectedItems.has(itemId)) {
         // Remove from selection
-        selectedItems.delete(itemCode);
+        selectedItems.delete(itemId);
         row.removeClass('selected-row');
         row.find('.select-cell').html('<span class="select-indicator">+</span>');
     } else {
         // Add to selection
-        selectedItems.set(itemCode, {
+        selectedItems.set(itemId, {
             ...itemData,
             rowData: row
         });
@@ -332,11 +318,11 @@ function updateSelectionPanel() {
     
     $('#selectedCount').text(selectedItems.size);
     
-    selectedItems.forEach((item, code) => {
-    	console.log(item.id);
+    selectedItems.forEach((item, itemId) => {
+    	// console.log(item.id);
         const itemDiv = $(`
-            <tr class="selected-row">
-                <td>${code}</td>
+            <tr id="selected" class="selected-row">
+                <td>${item.code}</td>
                 <td>${item.description}</td>
                 ${item.batchNo}
                 ${item.expiryDate}
@@ -349,7 +335,7 @@ function updateSelectionPanel() {
                 ${item.returnIndicated}
                 ${item.expiryDate1}
                 ${item.batchNo1}
-                <td><button class="remove-item" data-code="${code}">×</button></td>
+                <td><button class="remove-item" data-id="${itemId}">×</button></td>
             </tr>
         `);
         selectedList.append(itemDiv);
@@ -358,63 +344,28 @@ function updateSelectionPanel() {
     // Attach remove handlers
     $('.remove-item').off('click').on('click', function(e) {
         e.stopPropagation();
-        const code = $(this).data('code');
-        removeSelectedItem(code);
-    });
-}
-
-// NEW: Create selection panel
-function createSelectionPanel() {
-    // const panelHtml = `
-    //     <div id="selectionPanel" class="selection-panel">
-    //         <div class="panel-header">
-    //             <h4>Selected Items (<span id="selectedCount">0</span>)</h4>
-    //             <button id="clearAll">Clear All</button>
-    //         </div>
-    //         <div>
-    //         	<table style="width: 100%;" class="display" id="selectedResultsTable">
-    //                   <thead style="font-size: 12px;" class="bg-navy">
-    //                     <th class="bg-navy">Code</th>
-    //                     <th class="bg-navy">Description</th>
-    //                     <th class="bg-navy">Batch #</th>
-    //                     <th class="bg-navy">Exp. Date</th>
-    //                     <th class="bg-navy">Qty.</th>
-    //                     <th class="bg-navy">U/M</th>
-    //                     <th class="bg-navy">Unit Price</th>
-    //                     <th class="bg-navy">Amount</th>
-    //                     <th class="bg-navy">Tax</th>
-    //                     <th class="bg-navy">Unserve</th>
-    //                     <th class="bg-navy">Return Indicator</th>
-    //                     <th class="bg-navy">Expiry Date</th>
-    //                     <th class="bg-navy">BatchNo</th>
-    //                   </thead>
-    //                   <tbody id="selectedResultsBody" style="font-size: 11px; font-weight: bold;"></tbody>
-    //                 </table>
-    //         </div>
-    //     </div>
-    // `;
-    
-    // $('#resultsTable_wrapper').after(panelHtml);
-    
-    // Clear all button handler
-    $('#clearAll').on('click', function() {
-        selectedItems.clear();
-        $('.selected-row').removeClass('selected-row')
-                          .find('.select-cell')
-                          .html('<span class="select-indicator">+</span>');
-        updateSelectionPanel();
+        const itemId = $(this).data('id');
+        selectedItems.delete(itemId);
+        // console.log(itemId);
+        removeSelectedItem(itemId);
     });
 }
 
 // NEW: Remove selected item
-function removeSelectedItem(code) {
-    selectedItems.delete(code);
-    
-    // Update table row
-    $(`.item-code:contains('${code}')`).closest('tr')
-        .removeClass('selected-row')
-        .find('.select-cell')
-        .html('<span class="select-indicator">+</span>');
+function removeSelectedItem(itemId) {
+    selectedItems.delete(String(itemId));
+    // console.log(itemId);
+    // $('#selected').remove();
+    // Find and update the table row using the item id
+    $('#resultsTable tbody tr').each(function() {
+    	// $('#selected').remove();
+    	const row = $(this);
+    	const itemData = row.data('item-data');
+    	if (itemData.id == itemId) {
+    		row.removeClass('selected-row');
+        	row.find('.select-cell').html('<span class="select-indicator">+</span>');
+    	}
+    });
     
     updateSelectionPanel();
 }
@@ -425,8 +376,8 @@ function getSelectedItems() {
 }
 
 // NEW: Check if item is selected
-function isItemSelected(code) {
-    return selectedItems.has(code);
+function isItemSelected(itemId) {
+    return selectedItems.has(itemId);
 }
 
 const activeOneStyles = `
