@@ -343,8 +343,10 @@ $(function () {
 			selectedItems.delete(itemId);
 			row.removeClass('selected-row');
 			row.find('.select-cell').html('<span class="select-indicator">+</span>');
+			$('#selected_'+itemId).remove();
 		} else {
-        // Add to selection
+
+        	// Add to selection
 			selectedItems.set(itemId, {
 				...itemData,
 				rowData: row
@@ -363,16 +365,12 @@ $(function () {
 
 // NEW: Update selection panel (like ActiveOne)
 	function updateSelectionPanel() {
-		const panel = $('#selectionPanel');
-    // if (!panel.length) {
-    //     // Create selection panel if it doesn't exist
-    //     createSelectionPanel();
-    // }
-
+		
 		const selectedList = $('#selectedResultsBody');
-		selectedList.empty();
+		// selectedList.empty();
 
 		if (selectedItems.size === 0) {
+			// selectedList.empty();
 			selectedList.html('<div class="empty-selection">No items selected</div>');
 			$('#selectedCount').text('0');
 			return;
@@ -380,101 +378,128 @@ $(function () {
 
 		$('#selectedCount').text(selectedItems.size);
 
-		// 1. Ensure selectedList is defined before use, e.g., const selectedList = $('#yourTableId');
-
-// selectedItems.forEach((item, index) => {
-//     // 2. Define rowId before using it in HTML or AJAX
-//     const rowId = `row-${index}`;
-//     const priceLevelId = $('#selectCustomer').val() ? $('#selectCustomer').val().split('|')[1] : '';
-
-//     const itemDiv = $(`
-//         <tr id="selected" class="selected-row">
-//             <td>${item.code}</td>
-//             <td>${item.description}</td>
-//             <td><input type="number" class="quantity-input" min="0" step="0.01"></td>
-//             <td class="uom-cell">Loading...</td> <!-- Placeholder -->
-//             <td><input id="custom_price${index}" value="${item.customPrice}" readonly/></td>
-//             <td>coming soon</td>
-//             <td><button class="remove-item" data-id="${index}">×</button></td>
-//         </tr>
-//     `);
-    
-//     // 3. Append row immediately
-//     $('#selectedList').append(itemDiv); 
-
-//     // 4. Perform AJAX for this specific row
-//     $.ajax({
-//         url: '../../PHPCodes/SMIS/SalesOrderUnitOfMeasure.php',
-//         type: 'GET',
-//         data: {
-//             itemId: item.id, // Fixed: use item.id, not index
-//             priceLevelId: priceLevelId,
-//         },
-//         success: function(response) {
-//             $(`#${rowId} .uom-cell`).text(response);
-//         },
-//         error: function() {
-//             $(`#${rowId} .uom-cell`).text('Error');
-//         }
-//     });
-// });
-
+		// selectedList.empty();
 
 		selectedItems.forEach((item, itemId) => {
 
+			// selectedList.empty();
+
 			const priceLevelId = $('#selectCustomer').val() ? $('#selectCustomer').val().split('|')[1] : '';
 
-			// $('#select2').on('change', function() {
-			// 	var umValue = $(this).val();
-			// 	console.log('UM Value: ' + umValue);
-
-			// });
-
+			// const rowId = `row-${itemId}`;
+        
+        	// // Get existing quantity value if row already existed
+        	// let existingQty = "1";
+        	// const existingRow = $(`#${rowId}`);
+        	// if (existingRow.length > 0) {
+            // 	existingQty = existingRow.find('.quantity-input').val() || "1";
+            // }
 
 			//jquery ani dapit
 			$.ajax({
 				url: '../../PHPCodes/SMIS/SalesOrderUnitOfMeasure.php',
-				type: 'GET',
-				dataType: 'json',
-				data: {
-					itemId: itemId,
-					// priceLevelId: priceLevelId,
-				},
-				success:function(response) {
-					$(`#${rowId} .uom-cell`).html(response);
-				},
-				error:function(response) {
-					$(`#${rowId} .uom-cell`).text('Error');
-				}
+    			type: 'GET',
+    			dataType: 'json',
+    			data: { itemId: itemId },
+    			success: function(response) {
+    				$('#uom'+itemId).html(response);
+        
+        			const originalPrice = parseFloat($(`#custom_price${itemId}`).val()) || 0;
+        
+        			$(`#select2${itemId}`).on('change', function() {
+        				const multiplier = parseFloat($(this).val()) || 1;
+            			const unitPrice = originalPrice * multiplier;
+            
+            			// Update unit price
+            			$(`#custom_price2${itemId}`).val(unitPrice.toFixed(2));
+            			$(`#related${itemId}`).val($(`#select2${itemId}`).val());
+            			// Calculate and display total amount
+            			//ANI IBUTANG AG CODE SA VAT-EX UNIT PRICE
+            			calculateAndDisplayAmount(itemId, unitPrice);
+        			}).trigger('change');
+    			},
+    			error: function(response) {
+    				$('#uom'+itemId).text('Error');
+    			}
+			});
+
+			// Calculate total amount function
+			function calculateAndDisplayAmount(itemId, unitPrice) {
+
+				var vatEx = 1.12;
+			    const total = (unitPrice) * $('#quantity_'+itemId).val();
+			    //ANI IBUTANG AG CODE SA VAT-EX AMOUNT
+			    var vatExUnitPrice = unitPrice / vatEx;
+			    var vatExAmount = vatExUnitPrice * $('#quantity_'+itemId).val();
+			    // Update the amount input field
+			    $('#vatExUnitPrice'+itemId).val(vatExUnitPrice.toFixed(2));
+			    $(`#amount`+itemId).val(total.toFixed(2));
+			    $('#vatExAmount'+itemId).val(vatExAmount.toFixed(2));
+			}
+
+			// Trigger on quantity change
+			$(document).on('input', `.quantity-input`, function() {
+			    const rowId = $(this).closest('tr').attr('id');
+			    const unitPrice = parseFloat($(`#custom_price2${itemId}`).val()) || 0;
+			    calculateAndDisplayAmount(itemId, unitPrice);
 			});
 
 
     		console.log('Item ID: ' + item.id);
     		const rowId = `row-${itemId}`;
+    		var row = 0;
+			var quantity= $('#quantity_'+itemId).val();
+			var related_qty = $(`#select2${itemId}`).val();
+			$('#selected_'+itemId).remove();
+
+			console.log(quantity);
 			const itemDiv = $(`
-				<tr id="${rowId}" class="selected-row">
+				<tr id="selected_`+itemId+`" class="selected-row">
 				<td>${item.code}</td>
 				<td>${item.description}</td>
-				<td> <input type="number" class="quantity-input" min="0" step="0.01"></td>
-				<td class="uom-cell"></td>
-				<td><input id="custom_price`+`${itemId}`+`" value="`+`${item.customPrice}`+`" readonly/></td>
-				<td><input id="custom_price`+`${itemId}`+`" value="`+`${item.customPrice}`+`" readonly/></td>
-				<td>'coming soon'</td>
+				<td> <input type="number"  class="quantity-input" min="0" step="0.01" id="quantity_`+itemId+`" value="`+quantity+`" oninput="calculateAndDisplayAmount(`+itemId+`","`+`${item.customPrice}`+`)"></td>
+				<td id="uom`+itemId+`"></td>
+				<td><input readonly id="related`+itemId+`"/></td>
+				<td hidden><input id="custom_price`+`${itemId}`+`" value="`+`${item.customPrice}`+`" readonly/></td>
+				<td><input id="custom_price2`+`${itemId}`+`" value="`+`${item.customPrice}`+`" readonly/></td>
+				<td><input id="amount`+itemId+`" readonly></td>
+				<td><input id="vatExUnitPrice`+itemId+`" readonly></td>
+				<td><input id="vatExAmount`+itemId+`" readonly></td>
 				<td><button class="remove-item" data-id="${itemId}">×</button></td>
 				</tr>
 				`
 				);
+			row++;
 			selectedList.append(itemDiv);
+			console.log('"'+related_qty+'"');
+			$(`#select2${itemId}`).val('"'+related_qty+'"');
 		});
 
-    // Attach remove handlers
+		//Button for displaying console
+		$('#submitAllDataButton').on('click', function() {
+			var row = 0;
+			selectedItems.forEach((itemId) => {
+				if(row === 0){
+					consoleData(itemId);
+				}
+				row++;
+			});
+		});
+
+    	// Attach remove handlers
 		$('.remove-item').off('click').on('click', function(e) {
 			e.stopPropagation();
 			const itemId = $(this).data('id');
 			selectedItems.delete(itemId);
-        // console.log('Item ID: ' + itemId);
+			$('#selected_'+itemId).remove();
+        	// console.log('Item ID: ' + itemId);
 			removeSelectedItem(itemId);
 		});
+	}
+
+	// FUnction to console
+	function consoleData(itemId) {
+		console.log(itemId)
 	}
 
 // NEW: Remove selected item
